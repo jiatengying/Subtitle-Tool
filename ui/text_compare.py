@@ -7,6 +7,7 @@
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+import difflib
 
 
 class TextCompareWindow:
@@ -132,43 +133,44 @@ class TextCompareWindow:
         self.update_stats(differences)
     
     def compare_texts(self, text_a, text_b):
-        """对比两个文本，返回差异信息"""
-        # 使用逐字符对比算法
+        """对比两个文本，返回差异信息 - 使用行级对比算法"""
+        lines_a = text_a.splitlines(keepends=True)
+        lines_b = text_b.splitlines(keepends=True)
+        
         differences = {
-            'added': [],      # 在B中新增的字符位置
-            'removed': [],    # 在A中删除的字符位置
-            'modified': [],   # 修改的字符位置
-            'same': []        # 相同的字符位置
+            'added': [],      # 在B中新增的行位置
+            'removed': [],    # 在A中删除的行位置
+            'modified': [],   # 修改的行位置
+            'same': []        # 相同的行位置
         }
         
-        # 将文本转换为字符列表
-        chars_a = list(text_a)
-        chars_b = list(text_b)
+        # 使用 SequenceMatcher 进行行级对比
+        matcher = difflib.SequenceMatcher(None, lines_a, lines_b)
         
-        # 使用最长公共子序列算法进行字符级对比
-        max_len = max(len(chars_a), len(chars_b))
-        
-        for i in range(max_len):
-            char_a = chars_a[i] if i < len(chars_a) else ""
-            char_b = chars_b[i] if i < len(chars_b) else ""
-            
-            if i >= len(chars_a):
-                # A中不存在，B中新增
-                differences['added'].append(i)
-            elif i >= len(chars_b):
-                # B中不存在，A中删除
-                differences['removed'].append(i)
-            elif char_a == char_b:
-                # 相同
-                differences['same'].append(i)
-            else:
-                # 不同
-                differences['modified'].append(i)
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            if tag == 'equal':
+                # 相同的行
+                for i in range(i1, i2):
+                    differences['same'].append(i)
+            elif tag == 'delete':
+                # 删除的行
+                for i in range(i1, i2):
+                    differences['removed'].append(i)
+            elif tag == 'insert':
+                # 新增的行
+                for j in range(j1, j2):
+                    differences['added'].append(j)
+            elif tag == 'replace':
+                # 替换的行
+                for i in range(i1, i2):
+                    differences['removed'].append(i)
+                for j in range(j1, j2):
+                    differences['added'].append(j)
         
         return differences
     
     def apply_highlights(self, differences):
-        """应用字符级高亮显示"""
+        """应用行级高亮显示"""
         # 配置标签样式
         self.left_text.tag_configure("removed", background="#ffcccc", foreground="#cc0000")
         self.left_text.tag_configure("modified", background="#ffffcc", foreground="#cc6600")
@@ -187,67 +189,33 @@ class TextCompareWindow:
         self.right_text.tag_remove("modified", "1.0", tk.END)
         self.right_text.tag_remove("same", "1.0", tk.END)
         
-        # 获取文本内容
-        text_a = self.left_text.get("1.0", tk.END)
-        text_b = self.right_text.get("1.0", tk.END)
+        # 应用行级标签
+        for line_pos in differences['removed']:
+            line_num = line_pos + 1
+            start = f"{line_num}.0"
+            end = f"{line_num}.end"
+            self.left_text.tag_add("removed", start, end)
         
-        # 应用字符级标签
-        for char_pos in differences['removed']:
-            if char_pos < len(text_a):
-                # 将字符位置转换为行列位置
-                line, col = self._char_pos_to_line_col(text_a, char_pos)
-                start = f"{line}.{col}"
-                end = f"{line}.{col + 1}"
-                self.left_text.tag_add("removed", start, end)
+        for line_pos in differences['added']:
+            line_num = line_pos + 1
+            start = f"{line_num}.0"
+            end = f"{line_num}.end"
+            self.right_text.tag_add("added", start, end)
         
-        for char_pos in differences['added']:
-            if char_pos < len(text_b):
-                # 将字符位置转换为行列位置
-                line, col = self._char_pos_to_line_col(text_b, char_pos)
-                start = f"{line}.{col}"
-                end = f"{line}.{col + 1}"
-                self.right_text.tag_add("added", start, end)
+        for line_pos in differences['modified']:
+            line_num = line_pos + 1
+            start = f"{line_num}.0"
+            end = f"{line_num}.end"
+            self.left_text.tag_add("modified", start, end)
+            self.right_text.tag_add("modified", start, end)
         
-        for char_pos in differences['modified']:
-            if char_pos < len(text_a):
-                line, col = self._char_pos_to_line_col(text_a, char_pos)
-                start = f"{line}.{col}"
-                end = f"{line}.{col + 1}"
-                self.left_text.tag_add("modified", start, end)
-            
-            if char_pos < len(text_b):
-                line, col = self._char_pos_to_line_col(text_b, char_pos)
-                start = f"{line}.{col}"
-                end = f"{line}.{col + 1}"
-                self.right_text.tag_add("modified", start, end)
-        
-        for char_pos in differences['same']:
-            if char_pos < len(text_a):
-                line, col = self._char_pos_to_line_col(text_a, char_pos)
-                start = f"{line}.{col}"
-                end = f"{line}.{col + 1}"
-                self.left_text.tag_add("same", start, end)
-            
-            if char_pos < len(text_b):
-                line, col = self._char_pos_to_line_col(text_b, char_pos)
-                start = f"{line}.{col}"
-                end = f"{line}.{col + 1}"
-                self.right_text.tag_add("same", start, end)
+        for line_pos in differences['same']:
+            line_num = line_pos + 1
+            start = f"{line_num}.0"
+            end = f"{line_num}.end"
+            self.left_text.tag_add("same", start, end)
+            self.right_text.tag_add("same", start, end)
     
-    def _char_pos_to_line_col(self, text, char_pos):
-        """将字符位置转换为行列位置"""
-        lines = text.split('\n')
-        current_pos = 0
-        
-        for line_num, line in enumerate(lines):
-            line_length = len(line) + 1  # +1 for newline character
-            if current_pos + line_length > char_pos:
-                col = char_pos - current_pos
-                return line_num + 1, col
-            current_pos += line_length
-        
-        # 如果位置超出文本长度，返回最后一行
-        return len(lines), len(lines[-1]) if lines else 0
     
     def clear_highlights(self):
         """清空高亮显示"""
@@ -301,15 +269,18 @@ class TextCompareWindow:
         text_a = self.left_text.get("1.0", tk.END).rstrip('\n')
         text_b = self.right_text.get("1.0", tk.END).rstrip('\n')
         
-        total_a = len(text_a)
-        total_b = len(text_b)
-        
         added_count = len(differences['added'])
         removed_count = len(differences['removed'])
         modified_count = len(differences['modified'])
         same_count = len(differences['same'])
         
-        stats_text = f"📊 对比统计: 文本A({total_a}字符) vs 文本B({total_b}字符) | 新增:{added_count}字符 | 删除:{removed_count}字符 | 修改:{modified_count}字符 | 相同:{same_count}字符"
+        # 行级统计
+        lines_a = text_a.splitlines()
+        lines_b = text_b.splitlines()
+        total_a = len(lines_a)
+        total_b = len(lines_b)
+        
+        stats_text = f"📊 对比统计: 文本A({total_a}行) vs 文本B({total_b}行) | 新增:{added_count}行 | 删除:{removed_count}行 | 修改:{modified_count}行 | 相同:{same_count}行"
         self.compare_stats_label.config(text=stats_text)
     
     def set_texts(self, text_a, text_b):
