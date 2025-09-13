@@ -4,7 +4,6 @@
 
 ![版本](https://img.shields.io/badge/版本-1.0-blue)
 ![Python](https://img.shields.io/badge/Python-3.6+-green)
-![平台](https://img.shields.io/badge/平台-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
 ## ✨ 主要功能
 
